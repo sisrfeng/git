@@ -11,6 +11,7 @@ static diff_merges_setup_func_t force_func = NULL;
 static int suppress_m_parsing;
 static int hide = 0;
 static int m_imply_p = 0;
+static int got_m = 0;
 
 static void suppress(struct rev_info *revs)
 {
@@ -196,6 +197,7 @@ int diff_merges_parse_opts(struct rev_info *revs, const char **argv)
 		set_to_default(revs);
 		set_hide(revs);
 		revs->merges_imply_patch = m_imply_p;
+		got_m = 1;
 	} else if (!strcmp(arg, "-c")) {
 		set_func = set_combined;
 	} else if (!strcmp(arg, "--cc")) {
@@ -259,5 +261,7 @@ void diff_merges_setup_revs(struct rev_info *revs)
 	if (revs->merges_imply_patch || revs->merges_need_diff) {
 		if (!revs->diffopt.output_format)
 			revs->diffopt.output_format = DIFF_FORMAT_PATCH;
-	}
+	} else if (got_m)
+		warning(_("legacy use of lone '-m' detected: please use '--diff-merges=on,hide' instead, as '-m' may imply '-p'"));
+
 }

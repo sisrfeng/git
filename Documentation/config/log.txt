@@ -47,6 +47,17 @@ log.diffMergesHide::
 log.diffMerges-m-imply-p::
 	`true` enables implication of `-p` by `-m`.
 
+log.diffMergesForce::
+	Use specified log format for -c, --cc, and --remerge-diff
+	options instead of their respective formats when the option
+	appears on the command line one time. See `--diff-merges` in
+	linkgit:git-log[1] for allowed values. Using 'off' or 'none'
+	disables the override (default).
++
+The override is useful when external tool hard-codes one of the above
+options. Using any of these options two (or more) times will get back
+the original meaning of the options.
+
 log.follow::
 	If `true`, `git log` will act as if the `--follow` option was used when
 	a single <path> is given.  This has the same limitations as `--follow`,

@@ -6,6 +6,7 @@ typedef void (*diff_merges_setup_func_t)(struct rev_info *);
 static void set_separate(struct rev_info *revs);
 
 static diff_merges_setup_func_t set_to_default = set_separate;
+static diff_merges_setup_func_t force_func = NULL;
 static int suppress_m_parsing;
 static int hide = 0;
 static int m_imply_p = 0;
@@ -150,6 +151,21 @@ int diff_merges_m_imply_p_config(int on)
 	return 0;
 }
 
+int diff_merges_force_config(const char *value)
+{
+	diff_merges_setup_func_t func = func_by_opt(value);
+
+	if (!func)
+		return -1;
+
+	if (func == set_none)
+		force_func = NULL;
+	else if (func != set_hide && func != set_no_hide)
+		force_func = func;
+
+	return 0;
+}
+
 void diff_merges_suppress_m_parsing(void)
 {
 	suppress_m_parsing = 1;
@@ -160,20 +176,18 @@ int diff_merges_parse_opts(struct rev_info *revs, const char **argv)
 	int argcount = 1;
 	const char *optarg;
 	const char *arg = argv[0];
+	diff_merges_setup_func_t set_func = NULL;
 
 	if (!suppress_m_parsing && !strcmp(arg, "-m")) {
 		set_to_default(revs);
 		set_hide(revs);
 		revs->merges_imply_patch = m_imply_p;
 	} else if (!strcmp(arg, "-c")) {
-		set_combined(revs);
-		revs->merges_imply_patch = 1;
+		set_func = set_combined;
 	} else if (!strcmp(arg, "--cc")) {
-		set_dense_combined(revs);
-		revs->merges_imply_patch = 1;
+		set_func = set_dense_combined;
 	} else if (!strcmp(arg, "--remerge-diff")) {
-		set_remerge_diff(revs);
-		revs->merges_imply_patch = 1;
+		set_func = set_remerge_diff;
 	} else if (!strcmp(arg, "--no-diff-merges")) {
 		set_none(revs);
 	} else if (!strcmp(arg, "--combined-all-paths")) {
@@ -182,6 +196,12 @@ int diff_merges_parse_opts(struct rev_info *revs, const char **argv)
 		set_diff_merges(revs, optarg);
 	} else
 		return 0;
+
+	if (set_func != NULL) {
+		(force_func ? force_func : set_func)(revs);
+		force_func = NULL;
+		revs->merges_imply_patch = 1;
+	}
 
 	revs->explicit_diff_merges = 1;
 	return argcount;

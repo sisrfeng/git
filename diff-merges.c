@@ -213,7 +213,7 @@ int diff_merges_parse_opts(struct rev_info *revs, const char **argv)
 	} else
 		return 0;
 
-	if (set_func != NULL) {
+	if (set_func) {
 		(force_func ? force_func : set_func)(revs);
 		force_func = NULL;
 		revs->merges_imply_patch = 1;

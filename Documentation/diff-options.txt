@@ -34,11 +34,12 @@ endif::git-diff[]
 endif::git-format-patch[]
 
 ifdef::git-log[]
---diff-merges=(off|none|on|first-parent|1|separate|m|combined|c|dense-combined|cc|remerge|r)::
+--diff-merges=(off|none|on|first-parent|1|separate|m|combined|c|dense-combined|cc|remerge|r|[no-]hide)::
 --no-diff-merges::
 	Specify diff format to be used for merge commits. Default is
 	{diff-merges-default} unless `--first-parent` is in use, in which case
-	`first-parent` is the default.
+	`first-parent` is the default. Comma-separated list of
+	supported values is accepted as well.
 +
 --diff-merges=(off|none):::
 --no-diff-merges:::
@@ -48,11 +49,14 @@ ifdef::git-log[]
 --diff-merges=on:::
 --diff-merges=m:::
 -m:::
-	This option makes diff output for merge commits to be shown in
-	the default format. `-m` will produce the output only if `-p`
-	is given as well. The default format could be changed using
+	These options make diff output for merge commits to be shown in
+	the default format. The default format could be changed using
 	`log.diffMerges` configuration parameter, which default value
 	is `separate`.
++
+	`-m` is a shortcut for '--diff-merges=on,hide'.
+	In addition it implies `-p` when `log.diffMerges-m-imply-p` is
+	active.
 +
 --diff-merges=first-parent:::
 --diff-merges=1:::
@@ -71,6 +75,12 @@ ifdef::git-log[]
 	create a temporary tree object -- potentially containing files
 	with conflict markers and such.  A diff is then shown between
 	that temporary tree and the actual merge commit.
++
+--diff-merges=hide:::
+--diff-merges=no-hide:::
+	Hide (do not hide) the diff for merge commits unless `-p` options is given
+	as well. The default `no-hide` could be changed using `log.diffMerges`
+	configuration parameter.
 +
 The output emitted when this option is used is subject to change, and
 so is its interaction with other options (unless explicitly

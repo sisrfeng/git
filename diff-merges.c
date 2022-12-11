@@ -1,12 +1,17 @@
 #include "diff-merges.h"
 
 #include "revision.h"
+#include "strbuf.h"
 
 typedef void (*diff_merges_setup_func_t)(struct rev_info *);
 static void set_separate(struct rev_info *revs);
 
 static diff_merges_setup_func_t set_to_default = set_separate;
+static diff_merges_setup_func_t force_func = NULL;
 static int suppress_m_parsing;
+static int hide = 0;
+static int m_imply_p = 0;
+static int got_m = 0;
 
 static void suppress(struct rev_info *revs)
 {
@@ -20,15 +25,32 @@ static void suppress(struct rev_info *revs)
 	revs->remerge_diff = 0;
 }
 
+static void set_need_diff(struct rev_info *revs)
+{
+	revs->merges_need_diff = !hide;
+}
+
 static void common_setup(struct rev_info *revs)
 {
 	suppress(revs);
-	revs->merges_need_diff = 1;
+	set_need_diff(revs);
 }
 
 static void set_none(struct rev_info *revs)
 {
 	suppress(revs);
+}
+
+static void set_hide(struct rev_info *revs)
+{
+	hide = 1;
+	set_need_diff(revs);
+}
+
+static void set_no_hide(struct rev_info *revs)
+{
+	hide = 0;
+	set_need_diff(revs);
 }
 
 static void set_separate(struct rev_info *revs)
@@ -69,6 +91,10 @@ static diff_merges_setup_func_t func_by_opt(const char *optarg)
 {
 	if (!strcmp(optarg, "off") || !strcmp(optarg, "none"))
 		return set_none;
+	if (!strcmp(optarg, "hide"))
+		return set_hide;
+	if (!strcmp(optarg, "no-hide"))
+		return set_no_hide;
 	if (!strcmp(optarg, "1") || !strcmp(optarg, "first-parent"))
 		return set_first_parent;
 	if (!strcmp(optarg, "separate"))
@@ -86,12 +112,25 @@ static diff_merges_setup_func_t func_by_opt(const char *optarg)
 
 static void set_diff_merges(struct rev_info *revs, const char *optarg)
 {
-	diff_merges_setup_func_t func = func_by_opt(optarg);
+	char const delim = ',';
+	struct strbuf **opts = strbuf_split_str(optarg, delim, -1);
+	struct strbuf **p;
 
-	if (!func)
-		die(_("invalid value for '%s': '%s'"), "--diff-merges", optarg);
+	for (p = opts; *p; p++) {
+		diff_merges_setup_func_t func;
+		char *opt = (*p)->buf;
+		int len = (*p)->len;
 
-	func(revs);
+		if (opt[len - 1] == delim)
+			opt[len - 1] = '\0';
+		func = func_by_opt(opt);
+		if (!func) {
+			strbuf_list_free(opts);
+			die(_("invalid value for '%s': '%s'"), "--diff-merges", opt);
+		}
+		func(revs);
+	}
+	strbuf_list_free(opts);
 }
 
 /*
@@ -105,7 +144,40 @@ int diff_merges_config(const char *value)
 	if (!func)
 		return -1;
 
-	set_to_default = func;
+	if (func == set_hide)
+		hide = 1;
+	else if (func == set_no_hide)
+		hide = 0;
+	else
+		set_to_default = func;
+
+	return 0;
+}
+
+int diff_merges_hide_config(int on)
+{
+	hide = on;
+	return 0;
+}
+
+int diff_merges_m_imply_p_config(int on)
+{
+	m_imply_p = on;
+	return 0;
+}
+
+int diff_merges_force_config(const char *value)
+{
+	diff_merges_setup_func_t func = func_by_opt(value);
+
+	if (!func)
+		return -1;
+
+	if (func == set_none)
+		force_func = NULL;
+	else if (func != set_hide && func != set_no_hide)
+		force_func = func;
+
 	return 0;
 }
 
@@ -119,19 +191,19 @@ int diff_merges_parse_opts(struct rev_info *revs, const char **argv)
 	int argcount = 1;
 	const char *optarg;
 	const char *arg = argv[0];
+	diff_merges_setup_func_t set_func = NULL;
 
 	if (!suppress_m_parsing && !strcmp(arg, "-m")) {
 		set_to_default(revs);
-		revs->merges_need_diff = 0;
+		set_hide(revs);
+		revs->merges_imply_patch = m_imply_p;
+		got_m = 1;
 	} else if (!strcmp(arg, "-c")) {
-		set_combined(revs);
-		revs->merges_imply_patch = 1;
+		set_func = set_combined;
 	} else if (!strcmp(arg, "--cc")) {
-		set_dense_combined(revs);
-		revs->merges_imply_patch = 1;
+		set_func = set_dense_combined;
 	} else if (!strcmp(arg, "--remerge-diff")) {
-		set_remerge_diff(revs);
-		revs->merges_imply_patch = 1;
+		set_func = set_remerge_diff;
 	} else if (!strcmp(arg, "--no-diff-merges")) {
 		set_none(revs);
 	} else if (!strcmp(arg, "--combined-all-paths")) {
@@ -140,6 +212,12 @@ int diff_merges_parse_opts(struct rev_info *revs, const char **argv)
 		set_diff_merges(revs, optarg);
 	} else
 		return 0;
+
+	if (set_func) {
+		(force_func ? force_func : set_func)(revs);
+		force_func = NULL;
+		revs->merges_imply_patch = 1;
+	}
 
 	revs->explicit_diff_merges = 1;
 	return argcount;
@@ -183,5 +261,7 @@ void diff_merges_setup_revs(struct rev_info *revs)
 	if (revs->merges_imply_patch || revs->merges_need_diff) {
 		if (!revs->diffopt.output_format)
 			revs->diffopt.output_format = DIFF_FORMAT_PATCH;
-	}
+	} else if (got_m)
+		warning(_("legacy use of lone '-m' detected: please use '--diff-merges=on,hide' instead, as '-m' may imply '-p'"));
+
 }

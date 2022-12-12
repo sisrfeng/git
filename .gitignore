@@ -1,3 +1,4 @@
+t/*.po
 /fuzz_corpora
 /GIT-BUILD-DIR
 /GIT-BUILD-OPTIONS
